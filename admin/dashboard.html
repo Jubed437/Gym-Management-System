@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Gym Management</title>
+    <link rel="stylesheet" href="../style.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Dashboard Specific Styles */
+        .dashboard-container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 250px;
+            background-color: var(--surface-color);
+            padding: var(--spacing-lg);
+            border-right: 1px solid #3a3a3c;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            margin-bottom: 40px;
+        }
+
+        .nav-link {
+            display: block;
+            padding: 12px;
+            color: var(--text-secondary);
+            border-radius: var(--border-radius);
+            margin-bottom: var(--spacing-sm);
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .nav-link:hover,
+        .nav-link.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .main-content {
+            flex-grow: 1;
+            padding: 40px;
+            overflow-y: auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background-color: var(--surface-color);
+            padding: var(--spacing-lg);
+            border-radius: var(--border-radius);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        /* Table Styles */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: var(--spacing-md);
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #3a3a3c;
+        }
+
+        th {
+            color: var(--text-secondary);
+        }
+
+        .action-btn {
+            padding: 4px 8px;
+            font-size: 0.8rem;
+            margin-right: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2>Admin Panel</h2>
+            </div>
+            <a class="nav-link active" onclick="showSection('members')">Members</a>
+            <a class="nav-link" onclick="showSection('bills')">Bills & Fees</a>
+            <a class="nav-link" onclick="showSection('notifications')">Notifications</a>
+            <a class="nav-link" onclick="showSection('reports')">Reports</a>
+            <div style="margin-top: auto;">
+                <button class="btn-secondary" onclick="logout()" style="width: 100%">Logout</button>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="header">
+                <h1 id="page-title">Members Management</h1>
+                <div id="header-actions">
+                    <!-- Dynamic Actions based on section -->
+                    <button class="btn" onclick="openAddMemberModal()">+ Add Member</button>
+                </div>
+            </header>
+
+            <!-- Members Section -->
+            <section id="members-section" class="section active">
+                <div class="card">
+                    <!-- Search Bar placeholder -->
+                    <div class="form-group">
+                        <input type="text" id="member-search" class="form-input" placeholder="Search members..."
+                            onkeyup="filterMembers()">
+                    </div>
+                    <table id="members-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Contact</th>
+                                <th>Joint Date</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="members-list-body">
+                            <!-- Populated by JS -->
+                            <tr>
+                                <td colspan="5">Loading members...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Bills Section -->
+            <section id="bills-section" class="section">
+                <!-- Content for Bills -->
+                <div class="card">
+                    <h3>Create New Bill</h3>
+                    <form id="create-bill-form">
+                        <div class="form-group">
+                            <label class="form-label">Select Member</label>
+                            <select id="bill-member-select" class="form-input" required>
+                                <option value="">Select a member...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Amount</label>
+                            <input type="number" id="bill-amount" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Description / Month</label>
+                            <input type="text" id="bill-desc" class="form-input" placeholder="e.g. January 2025 Fee"
+                                required>
+                        </div>
+                        <button type="submit" class="btn">Generate Bill</button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Other Sections Placeholders -->
+            <section id="notifications-section" class="section">
+                <div class="card">
+                    <h3>Send Notification</h3>
+                    <p>Coming soon...</p>
+                </div>
+            </section>
+            <section id="reports-section" class="section">
+                <div class="card">
+                    <h3>Reports</h3>
+                    <p>Coming soon...</p>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <!-- Add Member Modal -->
+    <div id="add-member-modal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:100; align-items:center; justify-content:center;">
+        <div class="card" style="width: 400px; max-height: 90vh; overflow-y: auto;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+                <h3>Add New Member</h3>
+                <button onclick="closeAddMemberModal()"
+                    style="background:none; border:none; color:white; font-size:1.5rem; cursor:pointer;">&times;</button>
+            </div>
+            <form id="add-member-form">
+                <div class="form-group">
+                    <label class="form-label">Full Name</label>
+                    <input type="text" id="new-member-name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email (Login ID)</label>
+                    <input type="email" id="new-member-email" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" id="new-member-password" class="form-input" required>
+                </div>
+                <!-- TODO: Add Package Selection, Joining Date, etc. -->
+                <div class="form-group">
+                    <label class="form-label">Phone</label>
+                    <input type="tel" id="new-member-phone" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Joining Date</label>
+                    <input type="date" id="new-member-join-date" class="form-input" required>
+                </div>
+                <button type="submit" class="btn" style="width:100%">Create Member</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="../js/utils.js"></script>
+    <script type="module" src="../js/auth.js"></script> <!-- For logout -->
+    <script type="module" src="../js/admin.js"></script>
+    <script>
+        // Simple View Switcher
+        function showSection(sectionId) {
+            // Update Navigation
+            document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+            event.target.classList.add('active'); // Needs event context or pass element
+
+            // Update Content
+            document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+            document.getElementById(sectionId + '-section').classList.add('active');
+
+            // Update Header
+            const titleMap = {
+                'members': 'Members Management',
+                'bills': 'Bills & Fees',
+                'notifications': 'Notifications',
+                'reports': 'Reports'
+            };
+            document.getElementById('page-title').innerText = titleMap[sectionId];
+
+            // Show/Hide Add Button
+            const actionBtn = document.querySelector('#header-actions button');
+            if (sectionId === 'members') actionBtn.style.display = 'block';
+            else actionBtn.style.display = 'none';
+        }
+
+        function openAddMemberModal() {
+            document.getElementById('add-member-modal').style.display = 'flex';
+        }
+        function closeAddMemberModal() {
+            document.getElementById('add-member-modal').style.display = 'none';
+        }
+    </script>
+</body>
+
+</html>
