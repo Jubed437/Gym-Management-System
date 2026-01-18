@@ -2,8 +2,7 @@
 
 A comprehensive web-based Gym Management System built with HTML, CSS, JavaScript, and Firebase. This application manages members, gym trainers, bills, and notifications.
 
-## Live Demo
-🔗 [View Live Demo](https://gym-management-system-smoky-two.vercel.app)
+## Live Demo -  https://gym-management-system-smoky-two.vercel.app
 
 ## Features
 
