@@ -19,4 +19,4 @@ const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-export { auth, db, analytics, firebaseConfig };
+export { auth, db, analytics, firebaseConfig, app };

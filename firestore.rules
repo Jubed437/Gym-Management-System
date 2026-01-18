@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper to check if user is Admin (naive check based on email or assume custom claim if implemented later)
+    // For this simple app, we might rely on client-side logic + Auth, but strictly we should check a role.
+    // STARTING POINT: Allow authenticated users. ideally we check 'role' field in 'members' collection?
+    // But reading another doc in rules costs money/performance. 
+    // Let's assume ANY write to 'members' needs to be done by someone who already has access (Admin).
+    // Better: We can check if request.auth.token.email == 'admin@gmail.com' (Hardcoded for this specific demo).
+    function isAdmin() {
+       return request.auth.token.email == 'admin@gmail.com'; 
+    }
+
+    // Members Collection
+    match /members/{memberId} {
+      // Admin can do anything
+      allow read, write: if isAuthenticated() && isAdmin();
+      // Member can read their own profile
+      allow read: if isAuthenticated() && request.auth.uid == resource.data.uid;
+      // Member cannot write
+    }
+
+    // Bills Collection
+    match /bills/{billId} {
+        allow read, write: if isAuthenticated() && isAdmin();
+        // Member can read bills assigned to them.
+        // We need to trust the 'memberId' field (which is the doc ID of member, NOT uid).
+        // This is tricky if we don't store UID on bill. 
+        // Current implementation stores 'memberId' which is Firestore Doc ID.
+        // We can verify this if we join, but simpler is:
+        allow read: if isAuthenticated(); // Broad read for now, filtering done on client. 
+        // For strict production, we should store 'uid' on bills too.
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+        allow write: if isAuthenticated() && isAdmin();
+        // Everyone can read broadcasts
+        allow read: if isAuthenticated();
+    }
+  }
+}

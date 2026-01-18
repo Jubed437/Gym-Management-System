@@ -1,7 +1,6 @@
-import { db, auth, firebaseConfig } from '../js/firebase-config.js';
+import { db, auth, firebaseConfig, app } from '../js/firebase-config.js';
 import { collection, addDoc, getDocs, doc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
 // DOM Elements
 const membersTableBody = document.getElementById('members-list-body');
@@ -29,7 +28,7 @@ async function loadMembers() {
             row.innerHTML = `
                 <td>${member.name}</td>
                 <td>${member.email}<br><small>${member.phone}</small></td>
-                <td>${member.joinDate}</td>
+                <td>${member.package || 'Monthly'}<br><small>Since: ${member.joinDate}</small></td>
                 <td><span style="color:var(--success-color)">Active</span></td>
                 <td>
                     <button class="btn-secondary action-btn" onclick="deleteMember('${memberId}')">Delete</button>
@@ -56,8 +55,8 @@ async function loadMembers() {
 
 /**
  * Add New Member
- * Uses a secondary Firebase App instance to create a user in Authentication
- * without logging out the current Admin user.
+ * Simplified approach: Only store member data in Firestore.
+ * Members can be given login credentials later if needed.
  */
 async function addMember(e) {
     e.preventDefault();
@@ -66,36 +65,31 @@ async function addMember(e) {
     const password = document.getElementById('new-member-password').value;
     const phone = document.getElementById('new-member-phone').value;
     const joinDate = document.getElementById('new-member-join-date').value;
-
-    let secondaryApp = null;
+    const membershipPackage = document.getElementById('new-member-package').value;
 
     try {
-        // 1. Initialize a secondary app instance
-        // This allows us to interact with Auth without affecting the main app's currentUser (Admin)
-        secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
-        const secondaryAuth = getAuth(secondaryApp);
+        Logger.info('Adding new member to Firestore...', { email });
 
-        // 2. Create User in Secondary Auth
-        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-        const user = userCredential.user;
-        Logger.info('Member account created in Auth', { uid: user.uid });
+        // Show loading state
+        const submitBtn = addMemberForm.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerText;
+        submitBtn.innerText = 'Creating...';
+        submitBtn.disabled = true;
 
-        // 3. Add details to Firestore (Main DB instance)
+        // Add member details to Firestore
         await addDoc(collection(db, "members"), {
-            uid: user.uid, // Link to Auth UID
             name,
             email,
             phone,
             joinDate,
-            // Password is NOT stored in plain text anymore
-            role: 'member'
+            package: membershipPackage,
+            role: 'member',
+            status: 'Active',
+            createdAt: new Date().toISOString()
         });
 
-        Logger.info('Member profile added to Firestore', { name, email });
-        alert('Member account created successfully!');
-
-        // 4. Cleanup Secondary App (Optional but good practice)
-        await signOut(secondaryAuth); // Sign out the new user from the secondary instance just in case
+        Logger.info('Member added successfully');
+        alert('Member added successfully!');
 
         // Close Modal & Reload
         document.getElementById('add-member-modal').style.display = 'none';
@@ -105,12 +99,14 @@ async function addMember(e) {
     } catch (error) {
         Logger.error('Error adding member', error);
         alert('Error: ' + error.message);
+    } finally {
+        // Reset button
+        const submitBtn = addMemberForm.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.innerText = 'Create Member';
+            submitBtn.disabled = false;
+        }
     }
-    // Note: We don't delete the secondary app instance because the SDK handles it, 
-    // but reusing the name "SecondaryApp" might throw if we don't manage it.
-    // However, initializeApp is idempotent if we hold the reference, but here we scope it.
-    // Safest for simple usage is to leave it be or check if it exists (advanced).
-    // For this level, it's fine.
 }
 
 async function deleteMember(id) {
@@ -124,6 +120,7 @@ async function deleteMember(id) {
     }
 }
 
+// === Bill Management ===
 // === Bill Management ===
 async function createBill(e) {
     e.preventDefault();
@@ -141,17 +138,168 @@ async function createBill(e) {
         });
         alert('Bill generated successfully!');
         createBillForm.reset();
+        loadAllBills(); // Refresh list
     } catch (error) {
         Logger.error('Error creating bill', error);
         alert('Error: ' + error.message);
     }
 }
 
+async function loadAllBills() {
+    const billsContainer = document.getElementById('bills-list-container');
+    if (!billsContainer) return;
+
+    try {
+        const querySnapshot = await getDocs(collection(db, "bills"));
+        let html = `
+        <table style="width:100%; margin-top:20px;">
+            <thead>
+                <tr>
+                    <th>Member ID</th> <!-- Ideally Name, but doing join client side is expensive, show ID for now or fetch map -->
+                    <th>Desc</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+        querySnapshot.forEach((doc) => {
+            const bill = doc.data();
+            html += `
+                <tr>
+                    <td><small>${bill.memberId}</small></td>
+                    <td>${bill.description}<br><small>${new Date(bill.date).toLocaleDateString()}</small></td>
+                    <td>₹${bill.amount}</td>
+                    <td>
+                        <span style="color:${bill.status === 'Paid' ? 'var(--success-color)' : 'var(--error-color)'}">
+                            ${bill.status}
+                        </span>
+                    </td>
+                    <td>
+                        ${bill.status === 'Unpaid' ? `<button class="btn action-btn" onclick="markBillPaid('${doc.id}')">Mark Paid</button>` : '-'}
+                    </td>
+                </tr>
+            `;
+        });
+        html += '</tbody></table>';
+        billsContainer.innerHTML = html;
+    } catch (error) {
+        Logger.error('Error loading bills', error);
+        billsContainer.innerHTML = '<p>Error loading bills.</p>';
+    }
+}
+
+// Function to update bill payment status
+async function markBillPaid(billId) {
+    try {
+        await updateDoc(doc(db, "bills", billId), {
+            status: 'Paid',
+            paidDate: new Date().toISOString()
+        });
+        alert('Bill marked as Paid');
+        loadAllBills(); // Refresh UI
+    } catch (error) {
+        Logger.error('Error updating bill', error);
+        alert('Error: ' + error.message);
+    }
+}
+window.markBillPaid = markBillPaid;
+
+
+// === Notifications Management ===
+async function sendBroadcastNotification(e) {
+    e.preventDefault();
+    const title = document.getElementById('notif-title').value;
+    const message = document.getElementById('notif-message').value;
+
+    try {
+        await addDoc(collection(db, "notifications"), {
+            title,
+            message,
+            date: new Date().toISOString(),
+            type: 'broadcast'
+        });
+        alert('Notification sent to all members!');
+        document.getElementById('send-notification-form').reset();
+    } catch (error) {
+        Logger.error('Error sending notification', error);
+        alert('Error: ' + error.message);
+    }
+}
 
 // Event Listeners
-document.addEventListener('DOMContentLoaded', loadMembers);
+document.addEventListener('DOMContentLoaded', () => {
+    loadMembers();
+    loadAllBills();
+    loadReports();
+});
 if (addMemberForm) addMemberForm.addEventListener('submit', addMember);
 if (createBillForm) createBillForm.addEventListener('submit', createBill);
+const notifForm = document.getElementById('send-notification-form');
+if (notifForm) notifForm.addEventListener('submit', sendBroadcastNotification);
+
+// === Reports Management ===
+async function loadReports() {
+    // Only run if report section is active or on load
+    const revenueEl = document.getElementById('report-total-revenue');
+    const membersEl = document.getElementById('report-total-members');
+    const pendingEl = document.getElementById('report-pending-bills');
+
+    if (!revenueEl) return; // UI not ready
+
+    try {
+        // 1. Total Members
+        const membersSnapshot = await getDocs(collection(db, "members"));
+        membersEl.innerText = membersSnapshot.size;
+
+        // 2. Revenue & Pending
+        const billsSnapshot = await getDocs(collection(db, "bills"));
+        let totalRevenue = 0;
+        let pendingBills = 0;
+
+        billsSnapshot.forEach(doc => {
+            const bill = doc.data();
+            if (bill.status === 'Paid') {
+                totalRevenue += (bill.amount || 0);
+            } else {
+                pendingBills++;
+            }
+        });
+
+        revenueEl.innerText = `₹${totalRevenue}`;
+        pendingEl.innerText = pendingBills;
+
+    } catch (error) {
+        Logger.error('Error loading reports', error);
+        revenueEl.innerText = 'Error';
+    }
+}
+// Hook into showSection to refresh reports when tab is clicked
+/* Modified showSection in logic below or just call on load */
 
 // Expose functions to window for HTML onclicks
+// Search Filter
+function filterMembers() {
+    const input = document.getElementById('member-search');
+    const filter = input.value.toUpperCase();
+    const table = document.getElementById('members-table');
+    const tr = table.getElementsByTagName('tr');
+
+    for (let i = 1; i < tr.length; i++) {
+        const tdName = tr[i].getElementsByTagName('td')[0];
+        const tdContact = tr[i].getElementsByTagName('td')[1];
+        if (tdName || tdContact) {
+            const txtValueName = tdName.textContent || tdName.innerText;
+            const txtValueContact = tdContact.textContent || tdContact.innerText;
+            if (txtValueName.toUpperCase().indexOf(filter) > -1 || txtValueContact.toUpperCase().indexOf(filter) > -1) {
+                tr[i].style.display = "";
+            } else {
+                tr[i].style.display = "none";
+            }
+        }
+    }
+}
+window.filterMembers = filterMembers;
+
 window.deleteMember = deleteMember;
